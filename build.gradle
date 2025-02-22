@@ -59,6 +59,8 @@ task genJaxb {
                                         .replaceAll(/[^a-z0-9]/, '')
                 def packageName = "${basePackage}.${fileName}"
                 
+                logger.lifecycle("Processing WSDL: ${wsdlFile.name} -> ${packageName}")
+                
                 ant.taskdef(name: 'xjc',
                           classname: 'com.sun.tools.xjc.XJCTask',
                           classpath: configurations.compileClasspath.asPath)
@@ -68,6 +70,10 @@ task genJaxb {
                        schema: wsdlFile) {
                     arg(value: '-wsdl')
                     arg(value: '-extension')
+                    arg(value: '-XautoNameResolution')
+                    arg(value: '-quiet')
+                    arg(value: '-npa')
+                    produces(dir: outputDir, includes: "**/*.java")
                 }
             }
         }
