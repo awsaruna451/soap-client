@@ -88,6 +88,10 @@ task jaxb {
             ant.xjc(destdir: project.ext.generatedSrcDir) {
                 schema(dir: 'src/main/resources/xsd', includes: '**/*.xsd')
                 arg(value: '-extension')
+                arg(value: '-nv')
+                arg(value: '-quiet')
+                arg(value: '-enableIntrospection')
+                arg(value: '-mark-generated')
             }
         }
         
@@ -98,6 +102,10 @@ task jaxb {
                 schema(dir: 'src/main/resources/wsdl', includes: '**/*.wsdl')
                 arg(value: "-wsdl")
                 arg(value: "-extension")
+                arg(value: "-nv")
+                arg(value: "-quiet")
+                arg(value: "-enableIntrospection")
+                arg(value: "-mark-generated")
                 arg(value: "-p")
                 arg(value: project.ext.packageName)
             }
