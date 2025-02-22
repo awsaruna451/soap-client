@@ -16,6 +16,16 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
+    sourceSets {
+        main {
+            java {
+                srcDirs = ['src/main/java', 'build/generated-sources/jaxb']
+            }
+            resources {
+                srcDirs = ['src/main/resources']
+            }
+        }
+    }
 }
 
 repositories {
@@ -47,34 +57,23 @@ task genJaxb {
     outputs.dir(outputDir)
     
     doLast {
-        project.ant {
-            taskdef name: 'xjc',
-                   classname: 'com.sun.tools.xjc.XJCTask',
-                   classpath: configurations.compileClasspath.asPath
-            
-            mkdir(dir: outputDir)
-            
-            // Process WSDL files using schema tag
-            xjc(destdir: outputDir,
-                package: basePackage) {
-                schema(dir: wsdlDir) {
-                    include(name: "*.wsdl")
+        // Create output directory
+        outputDir.mkdirs()
+        
+        // Find all WSDL files
+        file(wsdlDir).listFiles().each { wsdlFile ->
+            if (wsdlFile.name.endsWith('.wsdl')) {
+                ant.taskdef(name: 'xjc',
+                          classname: 'com.sun.tools.xjc.XJCTask',
+                          classpath: configurations.compileClasspath.asPath)
+                
+                ant.xjc(destdir: outputDir,
+                       package: basePackage,
+                       schema: wsdlFile) {
+                    arg(value: '-wsdl')
+                    arg(value: '-extension')
                 }
-                arg(value: '-wsdl')
-                arg(value: '-extension')
-                produces(dir: outputDir, includes: "**/*.java")
             }
-        }
-    }
-}
-
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java', 'build/generated-sources/jaxb']
-        }
-        resources {
-            srcDirs = ['src/main/resources']
         }
     }
 }
