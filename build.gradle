@@ -2,7 +2,11 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.4.3'
     id 'io.spring.dependency-management' version '1.1.7'
-    id 'maven-publish'
+}
+
+// Add this configuration to handle duplicate files
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 group = 'com.example'
@@ -18,78 +22,54 @@ repositories {
     mavenCentral()
 }
 
-configurations {
-    provided
-}
-
-project.ext.generatedSrcDir = file("$buildDir/generated-src")
-
 dependencies {
-    provided 'com.sun.xml.bind:jaxb-impl:4.0.3'
-    provided 'com.sun.xml.bind:jaxb-xjc:4.0.3'
-    
-    implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
-    implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
-    implementation 'org.glassfish.jaxb:jaxb-xjc:4.0.3'
-    implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-web-services'
+    implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
+    implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
+    implementation 'com.sun.xml.bind:jaxb-xjc:4.0.3'
+    
+    // Add these additional dependencies for better production readiness
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-ext {
-    packageName = 'com.example.generated'
-}
-
-task cleanGeneratedSources(type: Delete) {
-    delete project.ext.generatedSrcDir
-}
-
-task jaxb {
-    dependsOn cleanGeneratedSources
+// WSDL to Java generation task
+task genJaxb {
+    def outputDir = file("build/generated-sources/jaxb")
+    def targetPackage = 'com.example.soap'
     
-    println 'Starting JAXB XJC...'
-    System.setProperty('javax.xml.accessExternalSchema', 'file')
-    
-    ext {
-        packagePath = packageName.replaceAll("\\.", "/")
-        destDir = new File(project.ext.generatedSrcDir, packagePath)
-    }
-    
-    outputs.dir destDir
-    
-    ant.taskdef(name: 'xjc', 
-                classname: 'com.sun.tools.xjc.XJCTask',
-                classpath: configurations.provided.asPath)
+    inputs.files(fileTree("src/main/resources/wsdl").include("*.wsdl"))
+    outputs.dir(outputDir)
     
     doLast {
-        project.ext.generatedSrcDir.mkdirs()
-        
-        // Process WSDL files one by one to avoid duplicates
-        fileTree(dir: 'src/main/resources/wsdl', include: '**/*.wsdl').each { wsdlFile ->
-            println "Processing WSDL file: ${wsdlFile.name}"
-            ant.xjc(destdir: project.ext.generatedSrcDir) {
-                schema(file: wsdlFile)
-                arg(value: "-wsdl")
-                arg(value: "-p")
-                arg(value: packageName)
-                // Add binding customizations if needed
-                arg(value: "-extension")
-                // Prevent duplicate class generation
-                arg(value: "-nv")
+        project.ant {
+            taskdef name: 'xjc',
+                   classname: 'com.sun.tools.xjc.XJCTask',
+                   classpath: configurations.compileClasspath.asPath
+            
+            mkdir(dir: outputDir)
+            
+            xjc(destdir: outputDir,
+                package: targetPackage,
+                schema: "src/main/resources/wsdl/OrderStatus.wsdl") {
+                arg(value: '-wsdl')
+                arg(value: '-extension')
+                produces(dir: outputDir, includes: '**/*.java')
             }
         }
     }
 }
 
-task generateSources {
-    dependsOn jaxb
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java', 'build/generated-sources/jaxb']
+        }
+    }
 }
 
-sourceSets.main.java.srcDirs += project.ext.generatedSrcDir
-compileJava.dependsOn(generateSources)
-
-tasks.named('test') {
-    useJUnitPlatform()
-}
+compileJava.dependsOn genJaxb
