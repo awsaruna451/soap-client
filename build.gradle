@@ -4,11 +4,6 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
-// Add this configuration to handle duplicate files
-tasks.withType(Jar) {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
@@ -22,37 +17,58 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    jaxb
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-web-services'
     implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
     implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
-    implementation 'com.sun.xml.bind:jaxb-xjc:4.0.3'
-    
-    // Add these additional dependencies for better production readiness
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     
+    // JAXB dependencies
+    jaxb 'com.sun.xml.bind:jaxb-xjc:4.0.3'
+    jaxb 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
+    jaxb 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
+    
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
-// WSDL to Java generation task
+// Handle duplicate files
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+def wsdlDir = "${projectDir}/src/main/resources/wsdl"
+def javaDir = "${projectDir}/src/main/java"
+def basePackage = 'com.example.soap'
+
+task cleanGeneratedSources(type: Delete) {
+    delete "${javaDir}/${basePackage.replace('.', '/')}"
+}
+
 task genJaxb {
-    def outputDir = file("${projectDir}/src/main/java")
-    def wsdlDir = file("${projectDir}/src/main/resources/wsdl")
-    def basePackage = 'com.example.soap'
+    description = 'Generates Java classes from WSDL files'
+    group = 'Source Generation'
     
-    inputs.dir(wsdlDir)
-    outputs.dir(outputDir)
+    inputs.files(fileTree(dir: wsdlDir).include('**/*.wsdl'))
+    outputs.dir(file("${javaDir}/${basePackage.replace('.', '/')}"))
     
     doLast {
-        // Create output directory
-        outputDir.mkdirs()
+        // Ensure output directory exists
+        file(javaDir).mkdirs()
         
-        // Find all WSDL files
-        file(wsdlDir).listFiles().findAll { it.name.endsWith('.wsdl') }.each { wsdlFile ->
-            // Generate unique package name based on the WSDL file name
+        // Configure JAXB task
+        ant.taskdef(name: 'xjc',
+                   classname: 'com.sun.tools.xjc.XJCTask',
+                   classpath: configurations.jaxb.asPath)
+        
+        // Process each WSDL file
+        fileTree(dir: wsdlDir).include('**/*.wsdl').each { wsdlFile ->
             def fileName = wsdlFile.name.take(wsdlFile.name.lastIndexOf('.'))
                                     .toLowerCase()
                                     .replaceAll(/[^a-z0-9]/, '')
@@ -60,24 +76,61 @@ task genJaxb {
             
             logger.lifecycle("Processing WSDL: ${wsdlFile.name} -> ${packageName}")
             
-            ant.taskdef(name: 'xjc',
-                      classname: 'com.sun.tools.xjc.XJCTask',
-                      classpath: configurations.compileClasspath.asPath)
-            
-            ant.xjc(destdir: outputDir,
-                   package: packageName,
-                   schema: wsdlFile) {
-                arg(value: '-wsdl')
-                arg(value: '-extension')
-                arg(value: '-XautoNameResolution')
-                arg(value: '-quiet')
-                arg(value: '-npa')
-                produces(dir: outputDir, includes: "**/*.java")
+            try {
+                ant.xjc(destdir: javaDir,
+                        package: packageName,
+                        schema: wsdlFile) {
+                    arg(value: '-wsdl')
+                    arg(value: '-extension')
+                    arg(value: '-XautoNameResolution')
+                    arg(value: '-quiet')
+                    produces(dir: javaDir, includes: "**/*.java")
+                    
+                    // Add binding customizations if needed
+                    // binding(dir: 'src/main/bindings', includes: '*.xjb')
+                }
+                
+                logger.lifecycle("Successfully generated classes for: ${wsdlFile.name}")
+                
+            } catch (Exception e) {
+                logger.error("Error processing ${wsdlFile.name}")
+                logger.error("Error details: ${e.message}")
+                e.printStackTrace()
+                // Continue with next file instead of failing completely
+                // throw e // Uncomment to fail fast
             }
         }
     }
 }
 
+// Optional task to validate WSDL files
+task validateWsdl {
+    description = 'Validates WSDL files before generation'
+    group = 'Verification'
+    
+    doLast {
+        fileTree(dir: wsdlDir).include('**/*.wsdl').each { wsdlFile ->
+            logger.lifecycle("Validating: ${wsdlFile.name}")
+            try {
+                def factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                factory.setNamespaceAware(true)
+                def builder = factory.newDocumentBuilder()
+                builder.parse(wsdlFile)
+                logger.lifecycle("${wsdlFile.name} is valid")
+            } catch (Exception e) {
+                logger.error("Invalid WSDL file: ${wsdlFile.name}")
+                throw new GradleException("WSDL validation failed: ${e.message}", e)
+            }
+        }
+    }
+}
+
+// Task dependencies
+genJaxb.dependsOn cleanGeneratedSources
+genJaxb.dependsOn validateWsdl
+compileJava.dependsOn genJaxb
+
+// Optional: Add source sets if needed
 sourceSets {
     main {
         java {
@@ -89,4 +142,11 @@ sourceSets {
     }
 }
 
-compileJava.dependsOn genJaxb
+// Optional: Configure Java compilation
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += [
+        '-Xlint:unchecked',
+        '-Xlint:deprecation'
+    ]
+}
