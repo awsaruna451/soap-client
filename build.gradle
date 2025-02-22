@@ -39,8 +39,8 @@ dependencies {
 
 // WSDL to Java generation task
 task genJaxb {
-    def outputDir = file("src/main/java")
-    def wsdlDir = file("src/main/resources/wsdl")
+    def outputDir = file("${projectDir}/src/main/java")
+    def wsdlDir = file("${projectDir}/src/main/resources/wsdl")
     def basePackage = 'com.example.soap'
     
     inputs.dir(wsdlDir)
