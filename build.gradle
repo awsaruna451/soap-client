@@ -4,6 +4,10 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
+tasks.withType(Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
@@ -15,138 +19,99 @@ java {
 
 repositories {
     mavenCentral()
+    flatDir {
+        dirs 'libs'
+    }
 }
 
 configurations {
-    jaxb
+    provided
+}
+
+project.ext {
+    generatedSrcDir = file("$buildDir/generated-src")
+    packageName = 'com.example.soap'
 }
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-web-services'
-    implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
-    implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     
     // JAXB dependencies
-    jaxb 'com.sun.xml.bind:jaxb-xjc:4.0.3'
-    jaxb 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
-    jaxb 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
+    implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
+    implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
+    implementation 'javax.xml.bind:jaxb-api:2.3.1'
+    
+    provided 'com.sun.xml.bind:jaxb-impl:4.0.3'
+    provided 'com.sun.xml.bind:jaxb-xjc:4.0.3'
+    provided 'com.sun.xml.bind:jaxb-core:4.0.3'
+    
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    
+    // Cache
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
     
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
-// Handle duplicate files
-tasks.withType(Jar) {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-def wsdlDir = "${projectDir}/src/main/resources/wsdl"
-def javaDir = "${projectDir}/src/main/java"
-def basePackage = 'com.example.soap'
-
-task cleanGeneratedSources(type: Delete) {
-    delete "${javaDir}/${basePackage.replace('.', '/')}"
-}
-
-task genJaxb {
-    description = 'Generates Java classes from WSDL files'
-    group = 'Source Generation'
+task jaxb {
+    println 'Starting JAXB XJC...'
+    System.setProperty('javax.xml.accessExternalSchema', 'file')
     
-    inputs.files(fileTree(dir: wsdlDir).include('**/*.wsdl'))
-    outputs.dir(file("${javaDir}/${basePackage.replace('.', '/')}"))
+    ext {
+        packagePath = project.ext.packageName.replaceAll("\\.", "/")
+        destDir = new File(project.ext.generatedSrcDir, packagePath)
+    }
+    
+    outputs.dir destDir
+    project.ext.generatedSrcDir.mkdirs()
+    
+    ant.taskdef(name: 'xjc',
+               classname: 'com.sun.tools.xjc.XJCTask',
+               classpath: configurations.provided.asPath)
+    
+    ant.taskdef(name: 'gen',
+               classname: 'com.sun.tools.xjc.XJCTask',
+               classpath: configurations.provided.asPath)
     
     doLast {
-        // Ensure output directory exists
-        file(javaDir).mkdirs()
+        project.ext.generatedSrcDir.mkdirs()
         
-        // Configure JAXB task
-        ant.taskdef(name: 'xjc',
-                   classname: 'com.sun.tools.xjc.XJCTask',
-                   classpath: configurations.jaxb.asPath)
+        // Process XSD files if any exist
+        def xsdDir = file('src/main/resources/xsd')
+        if (xsdDir.exists()) {
+            ant.xjc(destdir: project.ext.generatedSrcDir) {
+                schema(dir: 'src/main/resources/xsd', includes: '**/*.xsd')
+                arg(value: '-extension')
+            }
+        }
         
-        // Process each WSDL file
-        fileTree(dir: wsdlDir).include('**/*.wsdl').each { wsdlFile ->
-            def fileName = wsdlFile.name.take(wsdlFile.name.lastIndexOf('.'))
-                                    .toLowerCase()
-                                    .replaceAll(/[^a-z0-9]/, '')
-            def packageName = "${basePackage}.${fileName}"
-            
-            logger.lifecycle("Processing WSDL: ${wsdlFile.name} -> ${packageName}")
-            
-            try {
-                ant.xjc(destdir: javaDir,
-                        package: packageName,
-                        schema: wsdlFile) {
-                    arg(value: '-wsdl')
-                    arg(value: '-extension')
-                    arg(value: '-XautoNameResolution')
-                    arg(value: '-quiet')
-                    produces(dir: javaDir, includes: "**/*.java")
-                    
-                    // Add binding customizations if needed
-                    // binding(dir: 'src/main/bindings', includes: '*.xjb')
-                }
-                
-                logger.lifecycle("Successfully generated classes for: ${wsdlFile.name}")
-                
-            } catch (Exception e) {
-                logger.error("Error processing ${wsdlFile.name}")
-                logger.error("Error details: ${e.message}")
-                e.printStackTrace()
-                // Continue with next file instead of failing completely
-                // throw e // Uncomment to fail fast
+        // Process WSDL files
+        def wsdlDir = file('src/main/resources/wsdl')
+        if (wsdlDir.exists()) {
+            ant.gen(destdir: project.ext.generatedSrcDir) {
+                schema(dir: 'src/main/resources/wsdl', includes: '**/*.wsdl')
+                arg(value: "-wsdl")
+                arg(value: "-extension")
+                arg(value: "-p")
+                arg(value: project.ext.packageName)
             }
         }
     }
 }
 
-// Optional task to validate WSDL files
-task validateWsdl {
-    description = 'Validates WSDL files before generation'
-    group = 'Verification'
-    
-    doLast {
-        fileTree(dir: wsdlDir).include('**/*.wsdl').each { wsdlFile ->
-            logger.lifecycle("Validating: ${wsdlFile.name}")
-            try {
-                def factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
-                factory.setNamespaceAware(true)
-                def builder = factory.newDocumentBuilder()
-                builder.parse(wsdlFile)
-                logger.lifecycle("${wsdlFile.name} is valid")
-            } catch (Exception e) {
-                logger.error("Invalid WSDL file: ${wsdlFile.name}")
-                throw new GradleException("WSDL validation failed: ${e.message}", e)
-            }
-        }
-    }
-}
+task generateSources() {}
 
-// Task dependencies
-genJaxb.dependsOn cleanGeneratedSources
-genJaxb.dependsOn validateWsdl
-compileJava.dependsOn genJaxb
+sourceSets.main.java.srcDirs += project.ext.generatedSrcDir
 
-// Optional: Add source sets if needed
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java']
-        }
-        resources {
-            srcDirs = ['src/main/resources']
-        }
-    }
-}
+generateSources.dependsOn jaxb
+compileJava.dependsOn generateSources
 
-// Optional: Configure Java compilation
-tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
-    options.compilerArgs += [
-        '-Xlint:unchecked',
-        '-Xlint:deprecation'
-    ]
+clean {
+    delete project.ext.generatedSrcDir
 }
