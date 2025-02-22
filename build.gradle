@@ -41,8 +41,9 @@ dependencies {
 task genJaxb {
     def outputDir = file("build/generated-sources/jaxb")
     def targetPackage = 'com.example.soap'
+    def wsdlDir = file("src/main/resources/wsdl")
     
-    inputs.files(fileTree("src/main/resources/wsdl").include("*.wsdl"))
+    inputs.dir(wsdlDir)
     outputs.dir(outputDir)
     
     doLast {
@@ -53,9 +54,12 @@ task genJaxb {
             
             mkdir(dir: outputDir)
             
+            // Process all WSDL files using Ant's fileset
             xjc(destdir: outputDir,
-                package: targetPackage,
-                schema: "src/main/resources/wsdl/OrderStatus.wsdl") {
+                package: targetPackage) {
+                schema(dir: wsdlDir) {
+                    include(name: "*.wsdl")
+                }
                 arg(value: '-wsdl')
                 arg(value: '-extension')
                 produces(dir: outputDir, includes: '**/*.java')
