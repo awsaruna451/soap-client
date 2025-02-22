@@ -51,30 +51,28 @@ task genJaxb {
         outputDir.mkdirs()
         
         // Find all WSDL files
-        file(wsdlDir).listFiles().each { wsdlFile ->
-            if (wsdlFile.name.endsWith('.wsdl')) {
-                // Generate unique package name based on the WSDL file name
-                def fileName = wsdlFile.name.take(wsdlFile.name.lastIndexOf('.'))
-                                        .toLowerCase()
-                                        .replaceAll(/[^a-z0-9]/, '')
-                def packageName = "${basePackage}.${fileName}"
-                
-                logger.lifecycle("Processing WSDL: ${wsdlFile.name} -> ${packageName}")
-                
-                ant.taskdef(name: 'xjc',
-                          classname: 'com.sun.tools.xjc.XJCTask',
-                          classpath: configurations.compileClasspath.asPath)
-                
-                ant.xjc(destdir: outputDir,
-                       package: packageName,
-                       schema: wsdlFile) {
-                    arg(value: '-wsdl')
-                    arg(value: '-extension')
-                    arg(value: '-XautoNameResolution')
-                    arg(value: '-quiet')
-                    arg(value: '-npa')
-                    produces(dir: outputDir, includes: "**/*.java")
-                }
+        file(wsdlDir).listFiles().findAll { it.name.endsWith('.wsdl') }.each { wsdlFile ->
+            // Generate unique package name based on the WSDL file name
+            def fileName = wsdlFile.name.take(wsdlFile.name.lastIndexOf('.'))
+                                    .toLowerCase()
+                                    .replaceAll(/[^a-z0-9]/, '')
+            def packageName = "${basePackage}.${fileName}"
+            
+            logger.lifecycle("Processing WSDL: ${wsdlFile.name} -> ${packageName}")
+            
+            ant.taskdef(name: 'xjc',
+                      classname: 'com.sun.tools.xjc.XJCTask',
+                      classpath: configurations.compileClasspath.asPath)
+            
+            ant.xjc(destdir: outputDir,
+                   package: packageName,
+                   schema: wsdlFile) {
+                arg(value: '-wsdl')
+                arg(value: '-extension')
+                arg(value: '-XautoNameResolution')
+                arg(value: '-quiet')
+                arg(value: '-npa')
+                produces(dir: outputDir, includes: "**/*.java")
             }
         }
     }
