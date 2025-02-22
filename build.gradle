@@ -54,23 +54,15 @@ task genJaxb {
             
             mkdir(dir: outputDir)
             
-            // Find all WSDL files and process them
-            fileTree(dir: wsdlDir, include: '*.wsdl').each { wsdlFile ->
-                // Convert filename to package name (e.g., "DMSPOSService2.wsdl" -> "dmsposservice2")
-                def packageSuffix = wsdlFile.name
-                    .toLowerCase()
-                    .take(wsdlFile.name.lastIndexOf('.'))
-                    .replaceAll(/[^a-z0-9]/, '')
-                
-                def packageName = "${basePackage}.${packageSuffix}"
-                
-                xjc(destdir: outputDir,
-                    package: packageName,
-                    schema: wsdlFile) {
-                    arg(value: '-wsdl')
-                    arg(value: '-extension')
-                    produces(dir: outputDir, includes: "**/*.java")
+            // Process WSDL files using schema tag
+            xjc(destdir: outputDir,
+                package: basePackage) {
+                schema(dir: wsdlDir) {
+                    include(name: "*.wsdl")
                 }
+                arg(value: '-wsdl')
+                arg(value: '-extension')
+                produces(dir: outputDir, includes: "**/*.java")
             }
         }
     }
@@ -80,6 +72,9 @@ sourceSets {
     main {
         java {
             srcDirs = ['src/main/java', 'build/generated-sources/jaxb']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
         }
     }
 }
