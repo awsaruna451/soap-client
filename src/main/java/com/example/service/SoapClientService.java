@@ -6,8 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.retry.annotation.Backoff;
 //import org.springframework.retry.annotation.Retry;
-import com.example.soap.GetOrderStatusRequest;  // Generated from WSDL
-import com.example.soap.GetOrderStatusResponse; // Generated from WSDL
+import com.example.soap.orderstatus.GetOrderStatusRequest;  // Updated package
+import com.example.soap.orderstatus.GetOrderStatusResponse; // Updated package
 
 @Service
 public class SoapClientService {

@@ -1,8 +1,8 @@
 package com.example.controller;
 
 import com.example.service.SoapClientService;
-import com.example.soap.GetOrderStatusRequest;
-import com.example.soap.GetOrderStatusResponse;
+import com.example.soap.orderstatus.GetOrderStatusRequest;
+import com.example.soap.orderstatus.GetOrderStatusResponse;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
