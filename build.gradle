@@ -40,8 +40,8 @@ dependencies {
 // WSDL to Java generation task
 task genJaxb {
     def outputDir = file("build/generated-sources/jaxb")
-    def targetPackage = 'com.example.soap'
     def wsdlDir = file("src/main/resources/wsdl")
+    def basePackage = 'com.example.soap'
     
     inputs.dir(wsdlDir)
     outputs.dir(outputDir)
@@ -54,15 +54,23 @@ task genJaxb {
             
             mkdir(dir: outputDir)
             
-            // Process all WSDL files using Ant's fileset
-            xjc(destdir: outputDir,
-                package: targetPackage) {
-                schema(dir: wsdlDir) {
-                    include(name: "*.wsdl")
+            // Find all WSDL files and process them
+            fileTree(dir: wsdlDir, include: '*.wsdl').each { wsdlFile ->
+                // Convert filename to package name (e.g., "DMSPOSService2.wsdl" -> "dmsposservice2")
+                def packageSuffix = wsdlFile.name
+                    .toLowerCase()
+                    .take(wsdlFile.name.lastIndexOf('.'))
+                    .replaceAll(/[^a-z0-9]/, '')
+                
+                def packageName = "${basePackage}.${packageSuffix}"
+                
+                xjc(destdir: outputDir,
+                    package: packageName,
+                    schema: wsdlFile) {
+                    arg(value: '-wsdl')
+                    arg(value: '-extension')
+                    produces(dir: outputDir, includes: "**/*.java")
                 }
-                arg(value: '-wsdl')
-                arg(value: '-extension')
-                produces(dir: outputDir, includes: '**/*.java')
             }
         }
     }
