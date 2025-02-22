@@ -16,16 +16,6 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17))
     }
-    sourceSets {
-        main {
-            java {
-                srcDirs = ['src/main/java', 'build/generated-sources/jaxb']
-            }
-            resources {
-                srcDirs = ['src/main/resources']
-            }
-        }
-    }
 }
 
 repositories {
@@ -49,7 +39,7 @@ dependencies {
 
 // WSDL to Java generation task
 task genJaxb {
-    def outputDir = file("build/generated-sources/jaxb")
+    def outputDir = file("src/main/java")
     def wsdlDir = file("src/main/resources/wsdl")
     def basePackage = 'com.example.soap'
     
@@ -80,6 +70,17 @@ task genJaxb {
                     arg(value: '-extension')
                 }
             }
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
         }
     }
 }
