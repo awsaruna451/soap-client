@@ -39,74 +39,69 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.retry:spring-retry'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+
     // JAXB dependencies
     implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'
     implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
     implementation 'javax.xml.bind:jaxb-api:2.3.1'
-    
+
     provided 'com.sun.xml.bind:jaxb-impl:4.0.3'
     provided 'com.sun.xml.bind:jaxb-xjc:4.0.3'
     provided 'com.sun.xml.bind:jaxb-core:4.0.3'
-    
+
     // Lombok
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
-    
-    // Cache
-    implementation 'org.springframework.boot:spring-boot-starter-cache'
-    
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    // Spring WS dependencies
+    implementation 'org.springframework.ws:spring-ws-core'
+    implementation 'org.springframework.ws:spring-ws-security'
+    
+    // SOAP dependencies
+    implementation 'com.sun.xml.messaging.saaj:saaj-impl:3.0.2'
+    implementation 'jakarta.xml.soap:jakarta.xml.soap-api:3.0.1'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
 }
 
 task jaxb {
     println 'Starting JAXB XJC...'
     System.setProperty('javax.xml.accessExternalSchema', 'file')
-    
+
     ext {
         packagePath = project.ext.packageName.replaceAll("\\.", "/")
         destDir = new File(project.ext.generatedSrcDir, packagePath)
     }
-    
+
     outputs.dir destDir
     project.ext.generatedSrcDir.mkdirs()
-    
-    ant.taskdef(name: 'xjc',
-               classname: 'com.sun.tools.xjc.XJCTask',
-               classpath: configurations.provided.asPath)
-    
-    ant.taskdef(name: 'gen',
-               classname: 'com.sun.tools.xjc.XJCTask',
-               classpath: configurations.provided.asPath)
-    
+
+    ant.taskdef(name: 'xjc', classname: 'com.sun.tools.xjc.XJCTask', classpath: configurations.provided.asPath)
+    ant.taskdef(name: 'gen', classname: 'com.sun.tools.xjc.XJCTask', classpath: configurations.provided.asPath)
+
     doLast {
         project.ext.generatedSrcDir.mkdirs()
-        
-        // Process XSD files if any exist
+
         def xsdDir = file('src/main/resources/xsd')
         if (xsdDir.exists()) {
             ant.xjc(destdir: project.ext.generatedSrcDir) {
                 schema(dir: 'src/main/resources/xsd', includes: '**/*.xsd')
+                arg(value: '-XautoNameResolution')
                 arg(value: '-extension')
-                arg(value: '-nv')
-                arg(value: '-quiet')
-                arg(value: '-enableIntrospection')
-                arg(value: '-mark-generated')
             }
         }
-        
-        // Process WSDL files
+
         def wsdlDir = file('src/main/resources/wsdl')
         if (wsdlDir.exists()) {
             ant.gen(destdir: project.ext.generatedSrcDir) {
                 schema(dir: 'src/main/resources/wsdl', includes: '**/*.wsdl')
-                arg(value: "-wsdl")
-                arg(value: "-extension")
-                arg(value: "-nv")
-                arg(value: "-quiet")
-                arg(value: "-enableIntrospection")
-                arg(value: "-mark-generated")
-                arg(value: "-p")
+                arg(value: '-wsdl')
+                arg(value: '-XautoNameResolution')
+                arg(value: '-extension')
+                arg(value: '-nv')
+                arg(value: '-p')
                 arg(value: project.ext.packageName)
             }
         }
