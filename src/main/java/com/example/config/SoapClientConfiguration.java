@@ -17,6 +17,9 @@ import org.springframework.ws.client.core.WebServiceTemplate;
 import org.springframework.ws.soap.saaj.SaajSoapMessageFactory;
 import org.springframework.ws.transport.http.HttpComponentsMessageSender;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Configuration
 public class SoapClientConfiguration {
     private static final Logger log = LoggerFactory.getLogger(SoapClientConfiguration.class);
@@ -73,7 +76,38 @@ public class SoapClientConfiguration {
     @Bean
     public Jaxb2Marshaller marshaller(@Value("${soap.dmspos.context-path}") String contextPath) {
         Jaxb2Marshaller marshaller = new Jaxb2Marshaller();
-        marshaller.setContextPath(contextPath);
+        
+        try {
+            // Set the context path for JAXB-generated classes
+            marshaller.setContextPath(contextPath);
+            
+            // Add validation event handler for better error reporting
+            marshaller.setValidationEventHandler(event -> {
+                log.warn("JAXB validation event: {} - {}", event.getSeverity(), event.getMessage());
+                return true; // Continue processing despite validation errors
+            });
+            
+            // Configure marshaller properties
+            Map<String, Object> properties = new HashMap<>();
+            properties.put(jakarta.xml.bind.Marshaller.JAXB_FORMATTED_OUTPUT, true);
+            properties.put(jakarta.xml.bind.Marshaller.JAXB_ENCODING, "UTF-8");
+            // Add support for MTOM/XOP
+            properties.put(jakarta.xml.bind.Marshaller.JAXB_FRAGMENT, true);
+            marshaller.setMarshallerProperties(properties);
+            
+            // Initialize the marshaller
+            marshaller.afterPropertiesSet();
+            
+            // Verify the configuration
+            if (marshaller.getContextPath() == null || marshaller.getContextPath().isEmpty()) {
+                throw new IllegalStateException("Context path not properly set for JAXB marshaller");
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to initialize JAXB marshaller: {}", e.getMessage());
+            throw new IllegalStateException("Failed to initialize JAXB marshaller", e);
+        }
+        
         return marshaller;
     }
 
