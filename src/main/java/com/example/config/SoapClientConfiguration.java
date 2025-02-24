@@ -16,7 +16,6 @@ import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 import org.springframework.ws.client.core.WebServiceTemplate;
 import org.springframework.ws.soap.saaj.SaajSoapMessageFactory;
 import org.springframework.ws.transport.http.HttpComponentsMessageSender;
-
 import java.util.concurrent.TimeUnit;
 
 @Configuration
@@ -29,49 +28,46 @@ public class SoapClientConfiguration {
     @Value("${soap.client.read.timeout:30000}")
     private int readTimeout;
 
-    @Value("${soap.client.max.connections.per.route:20}")
-    private int maxConnectionsPerRoute;
+    @Value("${soap.client.max.total.connections:200}")
+    private int maxTotalConnections;
 
-    @Value("${soap.client.max.connections.total:100}")
-    private int maxConnectionsTotal;
-
-    @Value("${soap.client.connection.ttl:60000}")
-    private long connectionTTL;
+    @Value("${soap.client.max.per.route:50}")
+    private int maxPerRoute;
 
     @Bean
-    public PoolingHttpClientConnectionManager connectionManager() {
+    public PoolingHttpClientConnectionManager poolingConnectionManager() {
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-        connectionManager.setMaxTotal(maxConnectionsTotal);
-        connectionManager.setDefaultMaxPerRoute(maxConnectionsPerRoute);
-        connectionManager.setValidateAfterInactivity(1000); // Validate connections after 1 second of inactivity
+        connectionManager.setMaxTotal(maxTotalConnections);
+        connectionManager.setDefaultMaxPerRoute(maxPerRoute);
+        connectionManager.setValidateAfterInactivity(1000);
         return connectionManager;
     }
 
     @Bean
-    public CloseableHttpClient httpClient(PoolingHttpClientConnectionManager connectionManager) {
-        RequestConfig requestConfig = RequestConfig.custom()
+    public RequestConfig requestConfig() {
+        return RequestConfig.custom()
                 .setConnectTimeout(connectionTimeout)
                 .setSocketTimeout(readTimeout)
                 .setConnectionRequestTimeout(connectionTimeout)
                 .build();
+    }
 
+    @Bean
+    public CloseableHttpClient httpClient(PoolingHttpClientConnectionManager connectionManager,
+                                        RequestConfig requestConfig) {
         return HttpClientBuilder.create()
                 .setConnectionManager(connectionManager)
                 .setDefaultRequestConfig(requestConfig)
                 .evictExpiredConnections()
-                .evictIdleConnections(connectionTTL, TimeUnit.MILLISECONDS)
-                .setKeepAliveStrategy((response, context) -> connectionTTL)
-                .disableCookieManagement() // Disable cookie management for stateless calls
-                .useSystemProperties() // Use system properties for proxy settings
+                .evictIdleConnections(30, TimeUnit.SECONDS)
+                .disableCookieManagement()
+                .disableAuthCaching()
                 .build();
     }
 
     @Bean
     public HttpComponentsMessageSender messageSender(CloseableHttpClient httpClient) {
-        HttpComponentsMessageSender messageSender = new HttpComponentsMessageSender(httpClient);
-        messageSender.setConnectionTimeout(connectionTimeout);
-        messageSender.setReadTimeout(readTimeout);
-        return messageSender;
+        return new HttpComponentsMessageSender(httpClient);
     }
 
     @Bean
@@ -83,40 +79,9 @@ public class SoapClientConfiguration {
     }
 
     @Bean
-    public Jaxb2Marshaller marshaller(@Value("${soap.dmspos.context-path}") String contextPath) {
-        Jaxb2Marshaller marshaller = new Jaxb2Marshaller();
-        marshaller.setContextPath(contextPath);
-        
-        // Add validation and processing options
-        marshaller.setValidationEventHandler(event -> {
-            log.warn("JAXB validation event: {}", event.getMessage());
-            return true; // Continue processing despite validation errors
-        });
-        
-        marshaller.setMtomEnabled(true); // Enable MTOM for efficient binary data handling
-        return marshaller;
-    }
-
-    @Bean
-    public WebServiceTemplate webServiceTemplate(
-            Jaxb2Marshaller marshaller,
+    public WebServiceTemplateFactory webServiceTemplateFactory(
             SaajSoapMessageFactory messageFactory,
             HttpComponentsMessageSender messageSender) {
-        
-        WebServiceTemplate webServiceTemplate = new WebServiceTemplate();
-        webServiceTemplate.setMarshaller(marshaller);
-        webServiceTemplate.setUnmarshaller(marshaller);
-        webServiceTemplate.setMessageFactory(messageFactory);
-        webServiceTemplate.setMessageSender(messageSender);
-        
-        // Enable fault message resolution
-        webServiceTemplate.setFaultMessageResolver(message -> {
-            log.error("SOAP Fault received: {}", message);
-        });
-        
-        // Set default URI for all requests
-        webServiceTemplate.setDefaultUri("${soap.dmspos.endpoint}");
-        
-        return webServiceTemplate;
+        return new WebServiceTemplateFactory(messageFactory, messageSender);
     }
 } 

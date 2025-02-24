@@ -3,7 +3,9 @@ package com.example.service.impl;
 import com.example.exception.SoapServiceException;
 import com.example.service.DMSPOSService;
 import com.example.service.SoapErrorHandler;
+import com.example.config.WebServiceTemplateFactory;
 
+import com.example.soap.ObjectFactory;
 import dmsposintegration.dialog.lk.*;
 import dmsposintegration.dialog.lk.GetMaterialAvailableResponse;
 import dmsposintegration.dialog.lk.PendingPosItemRequest;
@@ -44,12 +46,13 @@ public class DMSPOSServiceImpl implements DMSPOSService {
     private final String serviceEndpoint;
 
     public DMSPOSServiceImpl(
-            WebServiceTemplate webServiceTemplate,
-            SoapErrorHandler errorHandler,
-            @Value("${soap.dmspos.endpoint}") String serviceEndpoint) {
-        this.webServiceTemplate = webServiceTemplate;
-        this.errorHandler = errorHandler;
-        this.serviceEndpoint = serviceEndpoint;
+            WebServiceTemplateFactory webServiceTemplateFactory,
+            @Value("${soap.dmspos.endpoint}") String endpoint) {
+        String contextPath = "";
+        this.webServiceTemplate = webServiceTemplateFactory
+            .createWebServiceTemplate(endpoint, contextPath);
+        this.errorHandler = null; // Assuming SoapErrorHandler is injected via constructor
+        this.serviceEndpoint = endpoint;
     }
 
     @Override
